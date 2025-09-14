@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 import productRoutes from "./routes/productRoutes.js";
 import { sql } from "./config/db.js";
 
+import { aj } from "./lib/arcjet.js";
+
 dotenv.config();
 
 const app = express();
@@ -17,7 +19,36 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan("dev"));
 
-app.use("/api/products", productRoutes)
+app.use(async (req, res, next) => {
+  try {
+    const decision = await aj.protect(req, {
+      requested: 1,
+    });
+
+    if (decision.isDenied()) {
+      if (decision.reason.isRateLimit()) {
+        res.status(429).json({ error: "Too Many Requests" });
+      } else if (decision.reason.isBot()) {
+        res.status(403).json({ error: "Bot Access Denied" });
+      } else {
+        res.status(403).json({ error: "Forbidden" });
+      }
+      return;
+    }
+
+    if (decision.results.some((result) => result.reason.isBot() && result.reason.isSpoofed())) {
+        res.status(403).json({ error: "Spoofed bot detected" });
+        return;
+    }
+
+    next();
+  } catch (err) {
+    console.log("Arcjet error", error);
+    next(error);
+  }
+});
+
+app.use("/api/products", productRoutes);
 
 async function initDB() {
   try {
@@ -29,9 +60,9 @@ async function initDB() {
         price DECIMAL(10, 2) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `
+    `;
     console.log("Database initialized successfully");
-  } catch(err) {
+  } catch (err) {
     console.log("Error initDB:", error);
   }
 }
@@ -39,5 +70,5 @@ async function initDB() {
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-  })
+  });
 });

@@ -10,7 +10,6 @@ import { sql } from "./config/db.js";
 import { aj } from "./lib/arcjet.js";
 
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
